@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Central Comitê Senador Marcelo Castro</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<style>
+  :root {
+    --verde: #43a047;
+    --amarelo: #fdd835;
+    --roxo: #8e24aa;
+    --vermelho: #e53935;
+    --cinza: #9e9e9e;
+    --azul: #1e5aa8;
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --texto: #1c2733;
+    --texto-suave: #5b6b7a;
+    --borda: #dde3e9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--texto);
+  }
+
+  /* ---------- HEADER ---------- */
+  header {
+    background: var(--azul);
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  header h1 {
+    font-size: 17px;
+    margin: 0;
+    font-weight: 600;
+  }
+  header .sub { font-size: 12px; opacity: .85; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .badge-papel {
+    background: rgba(255,255,255,.15);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+  }
+  button, .btn {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+  }
+  .btn-primary { background: #fff; color: var(--azul); }
+  .btn-outline { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.5); }
+  .btn-outline:hover { background: rgba(255,255,255,.1); }
+
+  /* ---------- LAYOUT ---------- */
+  #app { display: flex; height: calc(100vh - 54px); }
+  #sidebar {
+    width: 340px;
+    min-width: 340px;
+    background: var(--card);
+    border-right: 1px solid var(--borda);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  #sidebar-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--borda);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #sidebar-header h2 { font-size: 14px; margin: 0; }
+  #lista-reunioes { flex: 1; overflow-y: auto; }
+  #map { flex: 1; }
+
+  .reuniao-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--borda);
+    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .reuniao-item:hover { background: #f0f4f8; }
+  .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    margin-top: 4px; flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(0,0,0,.06);
+  }
+  .reuniao-item .titulo { font-size: 13.5px; font-weight: 600; }
+  .reuniao-item .meta { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
+  .empty-msg { padding: 20px 14px; color: var(--texto-suave); font-size: 13px; }
+
+  /* ---------- LEGENDA ---------- */
+  #legenda {
+    padding: 10px 14px;
+    border-top: 1px solid var(--borda);
+    font-size: 11.5px;
+    color: var(--texto-suave);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  #legenda .linha { display: flex; align-items: center; gap: 6px; }
+
+  /* ---------- MODAIS ---------- */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(20,30,40,.45);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .modal.wide { max-width: 620px; }
+  .modal h3 { margin-top: 0; font-size: 16px; }
+  .modal .close-x {
+    float: right; background: none; color: var(--texto-suave); font-size: 18px; padding: 2px 6px;
+  }
+  .campo { margin-bottom: 12px; }
+  .campo label { display: block; font-size: 12px; font-weight: 600; color: var(--texto-suave); margin-bottom: 4px; }
+  .campo input, .campo select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--borda); border-radius: 8px; font-size: 14px; font-family: inherit;
+  }
+  .linha2 { display: flex; gap: 10px; }
+  .linha2 .campo { flex: 1; }
+  .info-row { margin-bottom: 8px; font-size: 13.5px; }
+  .info-row b { display: inline-block; min-width: 130px; color: var(--texto-suave); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .3px; }
+  .info-row a { color: var(--azul); text-decoration: none; }
+  .status-pill {
+    display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 11.5px; font-weight: 700; color: #fff;
+  }
+  .acoes-modal { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .btn-azul { background: var(--azul); color: #fff; }
+  .btn-verde { background: var(--verde); color: #fff; }
+  .btn-vermelho { background: var(--vermelho); color: #fff; }
+  .btn-cinza { background: #eceff1; color: var(--texto); }
+
+  .pessoas-lista .part-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .pessoas-lista .part-row input[type=text] { flex: 1; }
+  .pessoas-lista .part-row label { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+  .pessoas-lista .part-row button { background: #fdecea; color: var(--vermelho); padding: 6px 10px; }
+  .secao-pessoas { border: 1px solid var(--borda); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+  .secao-pessoas > label { display: block; font-size: 12px; font-weight: 600; color: var(--texto-suave); margin-bottom: 8px; }
+  .aviso-vip {
+    background: #fff8e1; border: 1px solid #ffd600; color: #7a5c00; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; font-weight: 600; margin-bottom: 10px;
+  }
+
+  .msg-erro { color: var(--vermelho); font-size: 12.5px; margin-top: 6px; min-height: 16px; }
+  .msg-ok { color: var(--verde); font-size: 12.5px; margin-top: 6px; min-height: 16px; }
+
+  @media (max-width: 760px) {
+    #app { flex-direction: column; height: auto; }
+    #sidebar { width: 100%; min-width: 0; max-height: 40vh; }
+    #map { height: 55vh; }
+  }
+
+  /* ---------- MODO PAINEL (TV / monitor da sala de operações) ---------- */
+  body.modo-painel .header-actions { display: none !important; }
+  body.modo-painel #filtro-data-row { display: none !important; }
+  body.modo-painel #legenda-avisos { display: none !important; }
+  body.modo-painel header h1 { font-size: 22px; }
+  body.modo-painel header .sub { font-size: 14px; }
+  body.modo-painel #sidebar { width: 420px; min-width: 420px; }
+  body.modo-painel .reuniao-item .titulo { font-size: 16px; }
+  body.modo-painel .reuniao-item .meta { font-size: 14px; }
+  body.modo-painel #sidebar-header h2 { font-size: 18px; }
+  body.modo-painel #contador { font-size: 14px !important; }
+  body.modo-painel #legenda { font-size: 13.5px; }
+
+  /* ---------- IMPRESSÃO / EXPORTAR PDF (relatórios) ---------- */
+  @media print {
+    body * { visibility: hidden; }
+    #overlay-relatorios, #overlay-relatorios * { visibility: visible; }
+    #overlay-relatorios {
+      display: block !important;
+      position: absolute; inset: 0; background: #fff;
+      padding: 0; margin: 0;
+    }
+    #overlay-relatorios .modal {
+      max-width: 100%; max-height: none; overflow: visible; box-shadow: none; padding: 0;
+    }
+    #overlay-relatorios .close-x,
+    #overlay-relatorios #rel-tabs,
+    #overlay-relatorios #rel-filtro-pessoa,
+    #overlay-relatorios #rel-filtro-data,
+    #overlay-relatorios .acoes-modal {
+      display: none !important;
+    }
+    #rel-print-header { display: block !important; }
+    #rel-conteudo { max-height: none !important; overflow: visible !important; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Central Comitê Senador Marcelo Castro</h1>
+    <div class="sub" id="header-sub">Reuniões em Teresina — mapa atualizado automaticamente</div>
+  </div>
+  <div class="header-actions">
+    <span class="badge-papel" id="badge-papel">Visitante</span>
+    <button class="btn-primary" id="btn-nova-reuniao" style="display:none">+ Nova reunião</button>
+    <button class="btn-outline" id="btn-relatorios" style="display:none">Relatórios</button>
+    <button class="btn-outline" id="btn-modo-painel" style="display:none">📺 Modo painel</button>
+    <button class="btn-outline" id="btn-usuarios" style="display:none">Usuários</button>
+    <button class="btn-outline" id="btn-login">Entrar</button>
+    <button class="btn-outline" id="btn-logout" style="display:none">Sair</button>
+  </div>
+</header>
+
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-header" style="flex-direction:column; align-items:stretch; gap:6px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 id="titulo-lista">Reuniões de hoje</h2>
+        <span id="contador" style="font-size:12px;color:var(--texto-suave)"></span>
+      </div>
+      <div id="filtro-data-row" style="display:flex; gap:6px; align-items:center;">
+        <input type="date" id="filtro-data" style="flex:1; padding:6px 8px; border:1px solid var(--borda); border-radius:6px; font-size:12.5px;">
+        <button class="btn-cinza" style="padding:6px 10px; font-size:12px;" onclick="irParaHoje()">Hoje</button>
+      </div>
+    </div>
+    <div id="lista-reunioes"><div class="empty-msg">Carregando…</div></div>
+    <div id="legenda">
+      <div class="linha"><span class="dot" style="background:var(--verde)"></span> Mais de 2h para começar</div>
+      <div class="linha"><span class="dot" style="background:var(--amarelo)"></span> Entre 1h e 2h</div>
+      <div class="linha"><span class="dot" style="background:var(--roxo)"></span> Entre 30min e 1h</div>
+      <div class="linha"><span class="dot" style="background:var(--vermelho)"></span> Menos de 30min / atrasada</div>
+      <div class="linha"><span class="dot" style="background:var(--cinza)"></span> Finalizada</div>
+    </div>
+    <div id="legenda-avisos" style="padding:0 14px 10px; font-size:11.5px; color:var(--texto-suave); display:flex; flex-direction:column; gap:4px; border-top:1px dashed var(--borda); padding-top:8px;">
+      <div>⭐ autoridade presente</div>
+      <div>⚠ sem representante definido</div>
+      <div>📍❓ sem endereço definido</div>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<!-- ===================== MODAL: LOGIN ===================== -->
+<div class="overlay" id="overlay-login">
+  <div class="modal">
+    <button class="close-x" onclick="fecharModal('overlay-login')">✕</button>
+    <h3>Entrar</h3>
+    <div class="campo">
+      <label>Senha de acesso (master ou consulta)</label>
+      <input type="password" id="input-senha-login" placeholder="Digite sua senha">
+    </div>
+    <div class="msg-erro" id="login-erro"></div>
+    <div class="acoes-modal">
+      <button class="btn-azul" onclick="fazerLogin()">Entrar</button>
+      <button class="btn-cinza" onclick="fecharModal('overlay-login')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: DETALHES DA REUNIÃO ===================== -->
+<div class="overlay" id="overlay-detalhes">
+  <div class="modal wide">
+    <button class="close-x" onclick="fecharModal('overlay-detalhes')">✕</button>
+    <h3 id="det-titulo">Reunião</h3>
+    <div id="det-status"></div>
+    <div style="height:10px"></div>
+    <div id="det-corpo"></div>
+    <div class="acoes-modal" id="det-acoes"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: NOVA / EDITAR REUNIÃO (master) ===================== -->
+<div class="overlay" id="overlay-form">
+  <div class="modal wide">
+    <button class="close-x" onclick="fecharModal('overlay-form')">✕</button>
+    <h3 id="form-titulo-modal">Nova reunião</h3>
+
+    <div class="campo">
+      <label>Assunto / título da reunião</label>
+      <input type="text" id="f-titulo" placeholder="Ex.: Reunião com lideranças do bairro X">
+    </div>
+
+    <div class="campo">
+      <label>Endereço / local</label>
+      <input type="text" id="f-endereco" placeholder="Ex.: Rua Tal, 123, Bairro, Teresina">
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <button type="button" class="btn-cinza" onclick="buscarEndereco()">Buscar no mapa</button>
+        <span style="font-size:11.5px; color:var(--texto-suave); align-self:center;">Depois ajuste arrastando o alfinete azul no mapa abaixo.</span>
+      </div>
+    </div>
+
+    <div id="aviso-sem-endereco" class="aviso-vip" style="display:none; background:#fff3e0; border-color:#fb8c00; color:#7a4600;">
+      📍❓ Nenhum endereço definido — o alfinete ficará no centro de Teresina até você digitar/ajustar o local.
+    </div>
+
+    <div id="mini-mapa" style="height:220px; border-radius:8px; margin-bottom:12px; border:1px solid var(--borda);"></div>
+
+    <div class="linha2">
+      <div class="campo">
+        <label>Data e hora da reunião</label>
+        <input type="datetime-local" id="f-data-hora">
+      </div>
+      <div class="campo" style="max-width:170px;">
+        <label>Duração prevista (min)</label>
+        <input type="number" id="f-duracao" value="60" min="10" step="5">
+      </div>
+    </div>
+    <div class="msg-erro" id="f-data-limite-aviso" style="display:none; margin-top:-6px;"></div>
+
+    <div class="linha2">
+      <div class="campo">
+        <label>Nome da liderança responsável</label>
+        <input type="text" id="f-lideranca-nome">
+      </div>
+      <div class="campo">
+        <label>Telefone da liderança</label>
+        <input type="text" id="f-lideranca-telefone" placeholder="(86) 9....">
+      </div>
+    </div>
+    <div class="campo">
+      <label>Telefone do assistente da liderança (secundário)</label>
+      <input type="text" id="f-lideranca-assistente" placeholder="(86) 9....">
+    </div>
+
+    <datalist id="cadastro-nomes"></datalist>
+
+    <div id="aviso-sem-representante" class="aviso-vip" style="display:none; background:#fdecea; border-color:#e53935; color:#8a1c1c;">
+      ⚠ Nenhum representante do comitê definido ainda para esta reunião.
+      <div id="sugestao-livres" style="font-weight:400; margin-top:4px;"></div>
+    </div>
+
+    <div class="secao-pessoas">
+      <label>Representantes do comitê nesta reunião (pode haver mais de um)</label>
+      <div id="representantes-lista" class="pessoas-lista"></div>
+      <button type="button" class="btn-cinza" onclick="novaLinhaPessoa('representantes-lista', 'representante')">+ Adicionar representante</button>
+    </div>
+
+    <div class="secao-pessoas">
+      <label>Motoristas e veículos (pode haver mais de um carro)</label>
+      <div id="motoristas-lista" class="pessoas-lista"></div>
+      <button type="button" class="btn-cinza" onclick="novaLinhaPessoa('motoristas-lista', 'motorista')">+ Adicionar motorista/veículo</button>
+    </div>
+
+    <div class="secao-pessoas">
+      <label>Candidatos / autoridades presentes (marque "é autoridade" para destacar a reunião no mapa)</label>
+      <div id="vips-lista" class="pessoas-lista"></div>
+      <button type="button" class="btn-cinza" onclick="novaLinhaPessoa('vips-lista', 'vip')">+ Adicionar candidato/autoridade</button>
+    </div>
+
+    <div class="secao-pessoas">
+      <label>Demais pessoas que vão à reunião</label>
+      <div id="participantes-lista" class="pessoas-lista"></div>
+      <button type="button" class="btn-cinza" onclick="novaLinhaPessoa('participantes-lista', 'participante')">+ Adicionar pessoa</button>
+    </div>
+
+    <div class="campo">
+      <label>Observações / pauta / resultado</label>
+      <textarea id="f-observacoes" rows="3" placeholder="Anotações rápidas sobre a reunião (pauta, combinados, resultado)..." style="width:100%; padding:9px 10px; border:1px solid var(--borda); border-radius:8px; font-size:14px; font-family:inherit; resize:vertical;"></textarea>
+    </div>
+
+    <div class="msg-erro" id="form-erro"></div>
+    <div class="msg-ok" id="form-ok"></div>
+
+    <div class="acoes-modal">
+      <button class="btn-azul" onclick="salvarReuniao()">Salvar reunião</button>
+      <button class="btn-cinza" onclick="fecharModal('overlay-form')">Cancelar</button>
+      <button class="btn-vermelho" id="btn-excluir-reuniao" style="display:none" onclick="excluirReuniaoAtual()">Excluir reunião</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: RELATÓRIOS (master/consulta) ===================== -->
+<div class="overlay" id="overlay-relatorios">
+  <div class="modal wide">
+    <button class="close-x" onclick="fecharModal('overlay-relatorios')">✕</button>
+    <h3>Relatórios</h3>
+
+    <div id="rel-tabs" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
+      <button class="btn-cinza" id="tab-btn-dia" onclick="mudarAbaRelatorio('dia')">Por dia</button>
+      <button class="btn-cinza" id="tab-btn-lideranca" onclick="mudarAbaRelatorio('lideranca')">Por liderança</button>
+      <button class="btn-cinza" id="tab-btn-representante" onclick="mudarAbaRelatorio('representante')">Por representante</button>
+      <button class="btn-cinza" id="tab-btn-motorista" onclick="mudarAbaRelatorio('motorista')">Por motorista</button>
+      <button class="btn-cinza" id="tab-btn-conflitos" onclick="mudarAbaRelatorio('conflitos')">⚠ Conflitos de horário</button>
+    </div>
+
+    <div id="rel-filtro-pessoa" class="campo" style="display:none">
+      <label id="rel-filtro-label">Escolha</label>
+      <select id="rel-select-pessoa" onchange="renderRelatorio()"></select>
+    </div>
+    <div id="rel-filtro-data" class="campo" style="display:none">
+      <label>Data das reuniões</label>
+      <input type="date" id="rel-input-data" onchange="renderRelatorio()">
+    </div>
+
+    <div id="rel-print-header" style="display:none;">
+      <h2 style="margin:0 0 2px;">Central Comitê Senador Marcelo Castro</h2>
+      <div id="rel-print-subtitulo" style="margin-bottom:14px; color:#555;"></div>
+    </div>
+
+    <div id="rel-conteudo"></div>
+
+    <div class="acoes-modal">
+      <button class="btn-cinza" onclick="imprimirRelatorio()">🖨 Imprimir / exportar PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: USUÁRIOS (master) ===================== -->
+<div class="overlay" id="overlay-usuarios">
+  <div class="modal">
+    <button class="close-x" onclick="fecharModal('overlay-usuarios')">✕</button>
+    <h3>Usuários com senha</h3>
+    <div id="lista-usuarios" style="margin-bottom:16px;"></div>
+
+    <h3 style="font-size:14px;">Adicionar novo usuário</h3>
+    <div class="campo">
+      <label>Nome/identificação (ex.: "Representante bairro X")</label>
+      <input type="text" id="u-nome">
+    </div>
+    <div class="linha2">
+      <div class="campo">
+        <label>Papel</label>
+        <select id="u-papel">
+          <option value="consulta">Consulta</option>
+          <option value="master">Master</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label>Senha (mín. 6 caracteres)</label>
+        <input type="text" id="u-senha">
+      </div>
+    </div>
+    <div class="msg-erro" id="u-erro"></div>
+    <div class="msg-ok" id="u-ok"></div>
+    <div class="acoes-modal">
+      <button class="btn-azul" onclick="adicionarUsuario()">Adicionar usuário</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   CONFIGURAÇÃO
+   ========================================================================= */
+var API_URL = 'https://script.google.com/macros/s/AKfycbxnngKx6sQap2NW5-jsAKn6N_Mj1R7Bc6ODGb60LUZ_oWBIz5rupnwX1fCFlGaiZb2V/exec';
+
+var CIDADE_LAT_PADRAO = -5.089;
+var CIDADE_LNG_PADRAO = -42.801;
+
+/* =========================================================================
+   ESTADO
+   ========================================================================= */
+var estado = {
+  senha: localStorage.getItem('ccp_senha') || null,
+  papel: localStorage.getItem('ccp_papel') || null,
+  nome: localStorage.getItem('ccp_nome') || null,
+  reunioes: [],
+  markers: {},
+  reuniaoEditandoId: null,
+  miniMap: null,
+  miniMarker: null,
+  dataFiltro: hojeStr(),
+  dataLimiteProjeto: null,
+  abaRelatorio: 'lideranca',
+  cadastro: []
+};
+
+// "Modo painel" — tela simplificada (só mapa + lista) para ficar aberta numa TV/monitor
+// da sala de operações, sem login nem botões, atualizando sozinha.
+var MODO_PAINEL = new URLSearchParams(window.location.search).get('painel') === '1';
+if (MODO_PAINEL) {
+  document.body.classList.add('modo-painel');
+  // Por segurança/simplicidade, o modo painel sempre exibe a visão pública (sem telefones),
+  // mesmo que este navegador tenha uma sessão master/consulta salva.
+  estado.senha = null; estado.papel = null; estado.nome = null;
+}
+
+var BUFFER_MIN_CONFLITO = 20; // folga mínima (min) entre reuniões da mesma pessoa
+
+function hojeStr() {
+  var d = new Date();
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+function dataStrDe(iso) {
+  var d = new Date(iso);
+  if (isNaN(d)) return '';
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+/* =========================================================================
+   API
+   ========================================================================= */
+function api(action, params) {
+  var body = Object.assign({ action: action, senha: estado.senha || '' }, params || {});
+  return fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  }).then(function (r) { return r.json(); });
+}
+
+/* =========================================================================
+   MAPA PRINCIPAL
+   ========================================================================= */
+var map = L.map('map').setView([CIDADE_LAT_PADRAO, CIDADE_LNG_PADRAO], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap',
+  maxZoom: 19
+}).addTo(map);
+
+function corPorTempo(reuniao) {
+  if (reuniao.status === 'finalizada') return '#9e9e9e';
+  var agora = new Date();
+  var dataHora = new Date(reuniao.data_hora);
+  var diffMin = (dataHora - agora) / 60000;
+  if (diffMin < 30) return '#e53935';
+  if (diffMin < 60) return '#8e24aa';
+  if (diffMin < 120) return '#fdd835';
+  return '#43a047';
+}
+
+// Fora do "hoje" a contagem regressiva não faz sentido — usa cor por status.
+function corDoMarcador(reuniao) {
+  if (estado.dataFiltro === hojeStr()) return corPorTempo(reuniao);
+  return reuniao.status === 'finalizada' ? '#9e9e9e' : '#1e5aa8';
+}
+
+function iconePin(cor, destaque, semRepresentante, semEndereco) {
+  var tamanho = destaque ? 26 : 22;
+  var borda = destaque ? '3px solid #ffd600' : '2px solid #fff';
+  var sombra = destaque ? '0 0 0 2px #7a5c00, 0 1px 6px rgba(0,0,0,.5)' : '0 1px 4px rgba(0,0,0,.4)';
+  var estrela = destaque ? '<span style="position:absolute; top:-9px; left:50%; transform:translateX(-50%) rotate(45deg); font-size:12px;">⭐</span>' : '';
+  var alerta = semRepresentante ? '<span style="position:absolute; bottom:-2px; right:-6px; transform:rotate(45deg); background:#e53935; color:#fff; border-radius:50%; width:14px; height:14px; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; border:1px solid #fff;">!</span>' : '';
+  var alertaEndereco = semEndereco ? '<span style="position:absolute; bottom:-2px; left:-6px; transform:rotate(45deg); background:#fb8c00; color:#fff; border-radius:50%; width:14px; height:14px; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; border:1px solid #fff;">?</span>' : '';
+  return L.divIcon({
+    className: '',
+    html: '<div style="position:relative; width:' + tamanho + 'px; height:' + tamanho + 'px; border-radius:50% 50% 50% 0; background:' + cor + '; border:' + borda + '; box-shadow:' + sombra + '; transform:rotate(-45deg);">' + estrela + alerta + alertaEndereco + '</div>',
+    iconSize: [tamanho, tamanho],
+    iconAnchor: [tamanho / 2, tamanho],
+    popupAnchor: [0, -tamanho]
+  });
+}
+
+function semRepresentante(r) {
+  return Array.isArray(r.representantes) && r.representantes.length === 0 && r.status !== 'finalizada';
+}
+
+function semEndereco(r) {
+  return (!r.endereco || !r.endereco.trim()) && r.status !== 'finalizada';
+}
+
+function reunioesFiltradasDoDia() {
+  return estado.reunioes.filter(function (r) { return dataStrDe(r.data_hora) === estado.dataFiltro; });
+}
+
+function atualizarCoresNoMapa() {
+  reunioesFiltradasDoDia().forEach(function (r) {
+    var m = estado.markers[r.id];
+    if (m && r.lat && r.lng) {
+      m.setIcon(iconePin(corDoMarcador(r), r.tem_autoridade, semRepresentante(r), semEndereco(r)));
+    }
+  });
+  renderLista();
+}
+
+function redesenharMarcadores() {
+  Object.values(estado.markers).forEach(function (m) { map.removeLayer(m); });
+  estado.markers = {};
+
+  reunioesFiltradasDoDia().forEach(function (r) {
+    if (!r.lat || !r.lng) return;
+    var marker = L.marker([r.lat, r.lng], { icon: iconePin(corDoMarcador(r), r.tem_autoridade, semRepresentante(r), semEndereco(r)) }).addTo(map);
+    marker.on('click', function () { abrirDetalhes(r.id); });
+    estado.markers[r.id] = marker;
+  });
+}
+
+/* =========================================================================
+   CARREGAR REUNIÕES
+   ========================================================================= */
+function carregarReunioes() {
+  api('listReunioes', {}).then(function (resp) {
+    if (!resp.ok) return;
+    estado.reunioes = resp.reunioes.sort(function (a, b) {
+      return new Date(a.data_hora) - new Date(b.data_hora);
+    });
+    redesenharMarcadores();
+    renderLista();
+  }).catch(function (err) {
+    console.error('Erro ao carregar reuniões', err);
+  });
+}
+
+function carregarConfig() {
+  api('config', {}).then(function (resp) {
+    if (resp.ok && resp.config) {
+      var lat = parseFloat(resp.config.cidade_lat) || CIDADE_LAT_PADRAO;
+      var lng = parseFloat(resp.config.cidade_lng) || CIDADE_LNG_PADRAO;
+      map.setView([lat, lng], 12);
+
+      if (resp.config.data_limite_projeto) {
+        estado.dataLimiteProjeto = resp.config.data_limite_projeto;
+        var dataLimiteCurta = estado.dataLimiteProjeto.split('T')[0];
+        document.getElementById('header-sub').textContent =
+          'Reuniões em Teresina até ' + formatarDataCurta(dataLimiteCurta) + ' — mapa atualizado automaticamente';
+        document.getElementById('f-data-hora').max = estado.dataLimiteProjeto;
+        document.getElementById('filtro-data').max = dataLimiteCurta;
+      }
+    }
+  }).catch(function () {});
+}
+
+/* =========================================================================
+   CADASTRO (agenda de contatos reaproveitável — autocompletar nomes)
+   ========================================================================= */
+function carregarCadastro() {
+  if (estado.papel !== 'master') return;
+  api('listCadastro', {}).then(function (resp) {
+    if (!resp.ok) return;
+    estado.cadastro = resp.pessoas || [];
+    document.getElementById('cadastro-nomes').innerHTML = estado.cadastro.map(function (p) {
+      return '<option value="' + escapeHtml(p.nome) + '">';
+    }).join('');
+  }).catch(function () {});
+}
+
+function buscarNoCadastro(nome) {
+  var alvo = (nome || '').trim().toLowerCase();
+  if (!alvo) return null;
+  return estado.cadastro.find(function (p) { return (p.nome || '').trim().toLowerCase() === alvo; }) || null;
+}
+
+/* =========================================================================
+   FILTRO DE DATA (barra lateral / mapa principal)
+   ========================================================================= */
+document.getElementById('filtro-data').value = estado.dataFiltro;
+document.getElementById('filtro-data').addEventListener('change', function (e) {
+  estado.dataFiltro = e.target.value || hojeStr();
+  redesenharMarcadores();
+  renderLista();
+});
+function irParaHoje() {
+  estado.dataFiltro = hojeStr();
+  document.getElementById('filtro-data').value = estado.dataFiltro;
+  redesenharMarcadores();
+  renderLista();
+}
+
+/* =========================================================================
+   SIDEBAR — LISTA
+   ========================================================================= */
+function renderLista() {
+  var el = document.getElementById('lista-reunioes');
+  var lista = reunioesFiltradasDoDia().sort(function (a, b) { return new Date(a.data_hora) - new Date(b.data_hora); });
+  document.getElementById('contador').textContent = lista.length + ' reunião(ões)';
+  document.getElementById('titulo-lista').textContent =
+    estado.dataFiltro === hojeStr() ? 'Reuniões de hoje' : 'Reuniões — ' + formatarDataCurta(estado.dataFiltro);
+
+  if (!lista.length) {
+    el.innerHTML = '<div class="empty-msg">Nenhuma reunião nesta data.</div>';
+    return;
+  }
+
+  el.innerHTML = lista.map(function (r) {
+    var cor = corDoMarcador(r);
+    var hora = formatarHora(r.data_hora);
+    var estilo = r.tem_autoridade ? ' style="background:#fff8e1;"' : '';
+    return '<div class="reuniao-item" onclick="abrirDetalhes(\'' + r.id + '\')"' + estilo + '>' +
+      '<span class="dot" style="background:' + cor + '"></span>' +
+      '<div><div class="titulo">' + (r.tem_autoridade ? '⭐ ' : '') + (semRepresentante(r) ? '⚠ ' : '') + (semEndereco(r) ? '📍❓ ' : '') + escapeHtml(r.titulo || r.lideranca_nome || 'Reunião') + '</div>' +
+      '<div class="meta">' + hora + ' · ' + escapeHtml(r.lideranca_nome || '') + '</div>' +
+      '<div class="meta">' + (r.endereco ? escapeHtml(r.endereco) : '<span style="color:#fb8c00; font-weight:600;">Endereço não definido</span>') + '</div></div></div>';
+  }).join('');
+}
+
+function formatarDataCurta(dataYmd) {
+  var partes = dataYmd.split('-');
+  return partes[2] + '/' + partes[1] + '/' + partes[0];
+}
+
+function formatarHora(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d)) return iso;
+  var dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  return dias[d.getDay()] + ' ' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') +
+    ' às ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+/* =========================================================================
+   MODAL: DETALHES
+   ========================================================================= */
+function abrirDetalhes(id) {
+  var r = estado.reunioes.find(function (x) { return x.id === id; });
+  if (!r) return;
+
+  document.getElementById('det-titulo').textContent = r.titulo || r.lideranca_nome || 'Reunião';
+
+  var cor = corPorTempo(r);
+  var statusTexto = r.status === 'finalizada' ? 'Finalizada' : rotuloTempo(r);
+  document.getElementById('det-status').innerHTML =
+    '<span class="status-pill" style="background:' + cor + '">' + statusTexto + '</span>';
+
+  var corpo = '';
+
+  var autoridades = (r.vips || []).filter(function (v) { return String(v.autoridade).toLowerCase() === 'sim'; });
+  if (autoridades.length) {
+    corpo += '<div class="aviso-vip">⭐ Autoridade presente: ' + autoridades.map(function (v) { return escapeHtml(v.nome); }).join(', ') + '</div>';
+  }
+
+  if (semEndereco(r)) {
+    corpo += '<div class="aviso-vip" style="background:#fff3e0; border-color:#fb8c00; color:#7a4600;">' +
+      '📍❓ Atenção: esta reunião ainda não tem endereço/local definido (o alfinete está no centro de Teresina por padrão).' +
+      '</div>';
+  }
+
+  corpo += infoRow('Horário', formatarHora(r.data_hora));
+  corpo += infoRow('Local', escapeHtml(r.endereco || '—'));
+  corpo += infoRow('Liderança', escapeHtml(r.lideranca_nome || '—'));
+
+  if (r.vips && r.vips.length) {
+    corpo += '<div class="info-row"><b>Candidatos/convidados presentes</b><br>' +
+      r.vips.map(function (v) { return escapeHtml(v.nome) + (String(v.autoridade).toLowerCase() === 'sim' ? ' ⭐' : ''); }).join(', ') +
+      '</div>';
+  }
+
+  var logado = estado.papel === 'master' || estado.papel === 'consulta';
+  if (logado) {
+    corpo += infoRow('Tel. liderança', telLink(r.lideranca_telefone));
+    corpo += infoRow('Tel. assistente', telLink(r.lideranca_telefone_assistente));
+
+    if (r.representantes && r.representantes.length) {
+      corpo += '<div class="info-row"><b>Representantes do comitê</b><br>' +
+        '<ul style="margin:4px 0 0; padding-left:18px;">' + r.representantes.map(function (p) {
+          return '<li>' + escapeHtml(p.nome) + (p.telefone ? ' — ' + telLink(p.telefone) : '') + '</li>';
+        }).join('') + '</ul></div>';
+    } else if (semRepresentante(r)) {
+      var livres = pessoasLivresNoHorario(r.data_hora, r.duracao_minutos, r.id);
+      corpo += '<div class="aviso-vip" style="background:#fdecea; border-color:#e53935; color:#8a1c1c;">' +
+        '⚠ Nenhum representante do comitê definido ainda para esta reunião.' +
+        (livres.length ? '<div style="font-weight:400; margin-top:4px;">Sugestão — livres nesse horário: ' + escapeHtml(livres.join(', ')) + '</div>' : '') +
+        '</div>';
+    } else {
+      corpo += infoRow('Representantes do comitê', '—');
+    }
+
+    if (r.motoristas && r.motoristas.length) {
+      corpo += '<div class="info-row"><b>Motoristas e veículos</b><br>' +
+        '<ul style="margin:4px 0 0; padding-left:18px;">' + r.motoristas.map(function (p) {
+          return '<li>' + escapeHtml(p.nome) + (p.telefone ? ' — ' + telLink(p.telefone) : '') + (p.veiculo ? ' — ' + escapeHtml(p.veiculo) : '') + '</li>';
+        }).join('') + '</ul></div>';
+    } else {
+      corpo += infoRow('Motoristas e veículos', '—');
+    }
+
+    if (r.participantes && r.participantes.length) {
+      corpo += '<div class="info-row"><b>Demais participantes</b></div>';
+      corpo += '<ul style="margin-top:0">' + r.participantes.map(function (p) {
+        return '<li>' + escapeHtml(p.nome) + (p.telefone ? ' — ' + telLink(p.telefone) : '') +
+          (String(p.confirmado).toLowerCase() === 'não' || String(p.confirmado).toLowerCase() === 'nao' ? ' <i>(não vai)</i>' : '') + '</li>';
+      }).join('') + '</ul>';
+    }
+
+    if (r.observacoes) {
+      corpo += '<div class="info-row"><b>Observações / pauta / resultado</b><div style="white-space:pre-wrap; margin-top:4px;">' + escapeHtml(r.observacoes) + '</div></div>';
+    }
+  }
+
+  document.getElementById('det-corpo').innerHTML = corpo;
+
+  var acoes = '';
+  if (r.lat && r.lng) {
+    acoes += '<a class="btn btn-verde" style="text-decoration:none;display:inline-block" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=' + r.lat + ',' + r.lng + '">Rota no Google Maps</a>';
+    acoes += '<a class="btn btn-azul" style="text-decoration:none;display:inline-block" target="_blank" href="https://waze.com/ul?ll=' + r.lat + ',' + r.lng + '&navigate=yes">Rota no Waze</a>';
+  }
+  if (logado && r.status !== 'finalizada') {
+    acoes += '<button class="btn-cinza" onclick="finalizarReuniao(\'' + r.id + '\')">Marcar como finalizada</button>';
+  }
+  if (estado.papel === 'master') {
+    acoes += '<button class="btn-cinza" onclick="abrirFormEdicao(\'' + r.id + '\')">Editar</button>';
+  }
+  document.getElementById('det-acoes').innerHTML = acoes;
+
+  abrirModal('overlay-detalhes');
+}
+
+function rotuloTempo(r) {
+  var diffMin = (new Date(r.data_hora) - new Date()) / 60000;
+  if (diffMin < 0) return 'Atrasada';
+  if (diffMin < 30) return 'Menos de 30min';
+  if (diffMin < 60) return '30min a 1h';
+  if (diffMin < 120) return '1h a 2h';
+  return 'Mais de 2h';
+}
+
+function infoRow(label, valor) {
+  return '<div class="info-row"><b>' + label + '</b><br>' + (valor || '—') + '</div>';
+}
+function telLink(tel) {
+  if (!tel) return '—';
+  var limpo = String(tel).replace(/\D/g, '');
+  return '<a href="tel:' + limpo + '">' + escapeHtml(tel) + '</a>';
+}
+
+function finalizarReuniao(id) {
+  if (!confirm('Confirmar que esta reunião foi finalizada?')) return;
+  var nota = prompt('Deseja registrar rapidamente o que foi combinado/pautado? (opcional — deixe em branco para pular)') || '';
+  api('finalizarReuniao', { id: id, nota_final: nota.trim() }).then(function (resp) {
+    if (resp.ok) {
+      fecharModal('overlay-detalhes');
+      carregarReunioes();
+    } else {
+      alert(resp.erro || 'Erro ao finalizar');
+    }
+  });
+}
+
+/* =========================================================================
+   MODAIS — abrir/fechar
+   ========================================================================= */
+function abrirModal(id) { document.getElementById(id).classList.add('show'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('show'); }
+
+/* =========================================================================
+   LOGIN
+   ========================================================================= */
+document.getElementById('btn-login').addEventListener('click', function () {
+  document.getElementById('login-erro').textContent = '';
+  document.getElementById('input-senha-login').value = '';
+  abrirModal('overlay-login');
+});
+
+document.getElementById('btn-logout').addEventListener('click', function () {
+  estado.senha = null; estado.papel = null; estado.nome = null;
+  localStorage.removeItem('ccp_senha'); localStorage.removeItem('ccp_papel'); localStorage.removeItem('ccp_nome');
+  atualizarHeaderPapel();
+  carregarReunioes();
+});
+
+function fazerLogin() {
+  var senha = document.getElementById('input-senha-login').value;
+  if (!senha) return;
+  api('login', { senha: senha }).then(function (resp) {
+    if (resp.ok) {
+      estado.senha = senha; estado.papel = resp.papel; estado.nome = resp.nome;
+      localStorage.setItem('ccp_senha', senha);
+      localStorage.setItem('ccp_papel', resp.papel);
+      localStorage.setItem('ccp_nome', resp.nome || '');
+      fecharModal('overlay-login');
+      atualizarHeaderPapel();
+      carregarReunioes();
+      carregarCadastro();
+    } else {
+      document.getElementById('login-erro').textContent = resp.erro || 'Senha inválida';
+    }
+  });
+}
+
+function atualizarHeaderPapel() {
+  var badge = document.getElementById('badge-papel');
+  var btnLogin = document.getElementById('btn-login');
+  var btnLogout = document.getElementById('btn-logout');
+  var btnNova = document.getElementById('btn-nova-reuniao');
+
+  var btnUsuarios = document.getElementById('btn-usuarios');
+  var btnRelatorios = document.getElementById('btn-relatorios');
+  var btnModoPainel = document.getElementById('btn-modo-painel');
+  var logado = estado.papel === 'master' || estado.papel === 'consulta';
+  if (estado.papel === 'master') {
+    badge.textContent = 'Master' + (estado.nome ? ' — ' + estado.nome : '');
+    btnNova.style.display = 'inline-block';
+    btnUsuarios.style.display = 'inline-block';
+    btnModoPainel.style.display = 'inline-block';
+  } else if (estado.papel === 'consulta') {
+    badge.textContent = 'Consulta' + (estado.nome ? ' — ' + estado.nome : '');
+    btnNova.style.display = 'none';
+    btnUsuarios.style.display = 'none';
+    btnModoPainel.style.display = 'none';
+  } else {
+    badge.textContent = 'Visitante (acesso geral)';
+    btnNova.style.display = 'none';
+    btnUsuarios.style.display = 'none';
+    btnModoPainel.style.display = 'none';
+  }
+  btnRelatorios.style.display = logado ? 'inline-block' : 'none';
+  btnLogin.style.display = estado.papel ? 'none' : 'inline-block';
+  btnLogout.style.display = estado.papel ? 'inline-block' : 'none';
+}
+
+document.getElementById('btn-modo-painel').addEventListener('click', function () {
+  window.open(window.location.pathname + '?painel=1', '_blank');
+});
+
+/* =========================================================================
+   RELATÓRIOS (master/consulta) — por liderança, por representante,
+   por motorista, e detecção de conflitos de horário
+   ========================================================================= */
+document.getElementById('btn-relatorios').addEventListener('click', function () {
+  abrirModal('overlay-relatorios');
+  mudarAbaRelatorio('lideranca');
+});
+
+// Para "lideranca" o campo na reunião é uma string única; para "representante"/"motorista"
+// agora são listas (pode haver mais de uma pessoa por reunião).
+var CAMPO_POR_ABA = {
+  lideranca: 'lideranca_nome',
+  representante: 'representantes',
+  motorista: 'motoristas'
+};
+var LABEL_POR_ABA = {
+  lideranca: 'Liderança',
+  representante: 'Representante do comitê',
+  motorista: 'Motorista'
+};
+
+function nomesDaReuniao(r, aba) {
+  if (aba === 'lideranca') return r.lideranca_nome ? [r.lideranca_nome.trim()] : [];
+  var lista = r[CAMPO_POR_ABA[aba]] || [];
+  return lista.map(function (p) { return (p.nome || '').trim(); }).filter(Boolean);
+}
+
+function mudarAbaRelatorio(aba) {
+  estado.abaRelatorio = aba;
+  ['dia', 'lideranca', 'representante', 'motorista', 'conflitos'].forEach(function (a) {
+    document.getElementById('tab-btn-' + a).style.background = (a === aba) ? '#1e5aa8' : '#eceff1';
+    document.getElementById('tab-btn-' + a).style.color = (a === aba) ? '#fff' : '#1c2733';
+  });
+
+  var filtroPessoaDiv = document.getElementById('rel-filtro-pessoa');
+  var filtroDataDiv = document.getElementById('rel-filtro-data');
+  filtroPessoaDiv.style.display = 'none';
+  filtroDataDiv.style.display = 'none';
+
+  if (aba === 'dia') {
+    filtroDataDiv.style.display = 'block';
+    if (!document.getElementById('rel-input-data').value) {
+      document.getElementById('rel-input-data').value = estado.dataFiltro || hojeStr();
+    }
+  } else if (aba !== 'conflitos') {
+    filtroPessoaDiv.style.display = 'block';
+    document.getElementById('rel-filtro-label').textContent = LABEL_POR_ABA[aba];
+    var nomes = Array.from(new Set(estado.reunioes.reduce(function (acc, r) { return acc.concat(nomesDaReuniao(r, aba)); }, []))).sort();
+    var sel = document.getElementById('rel-select-pessoa');
+    sel.innerHTML = '<option value="">Todos</option>' + nomes.map(function (n) {
+      return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>';
+    }).join('');
+  }
+  renderRelatorio();
+}
+
+// campoLista: 'representantes' ou 'motoristas' (arrays na reunião)
+// Nomes do Cadastro que não têm nenhuma reunião (como representante ou motorista)
+// cujo horário se choque com [dataHoraISO, dataHoraISO+duracaoMin] (+ folga de segurança).
+function pessoasLivresNoHorario(dataHoraISO, duracaoMin, excluirReuniaoId) {
+  if (!dataHoraISO) return [];
+  var inicio = new Date(dataHoraISO).getTime();
+  var fim = inicio + (parseInt(duracaoMin) || 60) * 60000;
+  var folgaMs = BUFFER_MIN_CONFLITO * 60000;
+  var ocupados = {};
+
+  estado.reunioes.forEach(function (r) {
+    if (r.id === excluirReuniaoId || r.status === 'finalizada' || !r.data_hora) return;
+    var ini2 = new Date(r.data_hora).getTime();
+    var fim2 = ini2 + (parseInt(r.duracao_minutos) || 60) * 60000;
+    var seSobrepoe = (inicio < fim2 + folgaMs) && (ini2 < fim + folgaMs);
+    if (!seSobrepoe) return;
+    (r.representantes || []).concat(r.motoristas || []).forEach(function (p) {
+      if (p.nome) ocupados[p.nome.trim().toLowerCase()] = true;
+    });
+  });
+
+  return estado.cadastro
+    .map(function (p) { return p.nome; })
+    .filter(function (nome) { return nome && !ocupados[nome.trim().toLowerCase()]; });
+}
+
+function detectarConflitos(campoLista) {
+  var grupos = {};
+  estado.reunioes.forEach(function (r) {
+    if (r.status === 'finalizada' || !r.data_hora) return;
+    (r[campoLista] || []).forEach(function (p) {
+      var pessoa = (p.nome || '').trim();
+      if (!pessoa) return;
+      (grupos[pessoa] = grupos[pessoa] || []).push(r);
+    });
+  });
+  var conflitos = [];
+  Object.keys(grupos).forEach(function (pessoa) {
+    // uma mesma reunião pode ter entrado 2x se a pessoa aparecer 2x na lista por engano — remove duplicatas por id
+    var vistos = {};
+    var lista = grupos[pessoa].filter(function (r) { if (vistos[r.id]) return false; vistos[r.id] = true; return true; })
+      .sort(function (a, b) { return new Date(a.data_hora) - new Date(b.data_hora); });
+    for (var i = 0; i < lista.length - 1; i++) {
+      var a = lista[i], b = lista[i + 1];
+      var fimA = new Date(a.data_hora).getTime() + (parseInt(a.duracao_minutos) || 60) * 60000;
+      var inicioB = new Date(b.data_hora).getTime();
+      var gapMin = (inicioB - fimA) / 60000;
+      if (gapMin < BUFFER_MIN_CONFLITO) {
+        conflitos.push({ pessoa: pessoa, a: a, b: b, gapMin: Math.round(gapMin), tipo: gapMin < 0 ? 'sobreposição' : 'tempo apertado' });
+      }
+    }
+  });
+  return conflitos;
+}
+
+function renderRelatorio() {
+  var el = document.getElementById('rel-conteudo');
+  var aba = estado.abaRelatorio;
+
+  if (aba === 'conflitos') {
+    var conflitosRep = detectarConflitos('representantes');
+    var conflitosMot = detectarConflitos('motoristas');
+    var html = '';
+    html += renderBlocoConflitos('Representantes do comitê', conflitosRep);
+    html += renderBlocoConflitos('Motoristas', conflitosMot);
+    el.innerHTML = html;
+    return;
+  }
+
+  var lista, conflitos;
+
+  if (aba === 'dia') {
+    var dataEscolhida = document.getElementById('rel-input-data').value || hojeStr();
+    conflitos = detectarConflitos('representantes').concat(detectarConflitos('motoristas'));
+    lista = estado.reunioes.filter(function (r) { return dataStrDe(r.data_hora) === dataEscolhida; })
+      .sort(function (a, b) { return new Date(a.data_hora) - new Date(b.data_hora); });
+  } else {
+    var filtro = document.getElementById('rel-select-pessoa').value;
+    conflitos = (aba === 'representante') ? detectarConflitos('representantes')
+               : (aba === 'motorista') ? detectarConflitos('motoristas') : [];
+    lista = estado.reunioes.filter(function (r) {
+      if (!r.data_hora) return false;
+      if (!filtro) return true;
+      return nomesDaReuniao(r, aba).indexOf(filtro) !== -1;
+    }).sort(function (a, b) { return new Date(a.data_hora) - new Date(b.data_hora); });
+  }
+
+  if (!lista.length) {
+    el.innerHTML = '<div class="empty-msg">Nenhuma reunião encontrada' + (aba === 'dia' ? ' nesta data.' : '.') + '</div>';
+    return;
+  }
+
+  el.innerHTML = '<div style="max-height:50vh; overflow-y:auto;">' + lista.map(function (r) {
+    var conflito = conflitos.find(function (c) { return c.a.id === r.id || c.b.id === r.id; });
+    var nomesRep = (r.representantes || []).map(function (p) { return p.nome; }).join(', ') || '—';
+    var nomesMot = (r.motoristas || []).map(function (p) { return p.nome; }).join(', ') || '—';
+    return '<div style="border-bottom:1px solid var(--borda); padding-bottom:8px; margin-bottom:8px; font-size:13.5px;">' +
+      '<b style="text-transform:none;">' + formatarHora(r.data_hora) + '</b> · ' + escapeHtml(r.titulo || '(sem título)') +
+      (r.tem_autoridade ? ' ⭐' : '') +
+      (r.status === 'finalizada' ? ' <span class="status-pill" style="background:#9e9e9e">Finalizada</span>' : '') + '<br>' +
+      escapeHtml(r.endereco || '') + '<br>' +
+      '<span style="color:var(--texto-suave); font-size:12px;">' +
+      'Liderança: ' + escapeHtml(r.lideranca_nome || '—') +
+      (aba !== 'representante' ? ' · Representante(s): ' + escapeHtml(nomesRep) : '') +
+      (aba !== 'motorista' ? ' · Motorista(s): ' + escapeHtml(nomesMot) : '') + '</span>' +
+      (conflito ? '<div style="color:var(--vermelho); font-size:12px; margin-top:4px;">⚠ ' +
+        (conflito.tipo === 'sobreposição' ? 'Sobreposição de horário' : 'Menos de ' + BUFFER_MIN_CONFLITO + 'min entre reuniões') +
+        ' com "' + escapeHtml((conflito.a.id === r.id ? conflito.b : conflito.a).titulo || 'outra reunião') + '"</div>' : '') +
+      '</div>';
+  }).join('') + '</div>';
+}
+
+function renderBlocoConflitos(titulo, conflitos) {
+  var html = '<h4 style="margin-bottom:8px;">' + titulo + (conflitos.length ? ' — ' + conflitos.length + ' encontrado(s)' : ' — nenhum conflito') + '</h4>';
+  if (!conflitos.length) return html;
+  html += conflitos.map(function (c) {
+    return '<div style="border-bottom:1px solid var(--borda); padding-bottom:8px; margin-bottom:8px; font-size:13.5px;">' +
+      '<b style="text-transform:none;">' + escapeHtml(c.pessoa) + '</b> — ' + (c.tipo === 'sobreposição' ? 'sobreposição de horário' : 'só ' + c.gapMin + 'min de folga') + '<br>' +
+      '<span style="font-size:12.5px;">' + formatarHora(c.a.data_hora) + ' — ' + escapeHtml(c.a.titulo || 'Reunião') + '</span><br>' +
+      '<span style="font-size:12.5px;">' + formatarHora(c.b.data_hora) + ' — ' + escapeHtml(c.b.titulo || 'Reunião') + '</span>' +
+      '</div>';
+  }).join('');
+  return html;
+}
+
+function imprimirRelatorio() {
+  var aba = estado.abaRelatorio;
+  var subtitulo;
+  if (aba === 'dia') {
+    var dataEscolhida = document.getElementById('rel-input-data').value || hojeStr();
+    subtitulo = 'Reuniões do dia ' + formatarDataCurta(dataEscolhida);
+  } else if (aba === 'conflitos') {
+    subtitulo = 'Conflitos de horário — representantes e motoristas';
+  } else {
+    var pessoa = document.getElementById('rel-select-pessoa').value;
+    subtitulo = 'Relatório por ' + (LABEL_POR_ABA[aba] || aba).toLowerCase() + (pessoa ? ' — ' + pessoa : ' — todos');
+  }
+  subtitulo += ' · gerado em ' + formatarHora(new Date().toISOString());
+  document.getElementById('rel-print-subtitulo').textContent = subtitulo;
+  document.getElementById('rel-print-header').style.display = 'block';
+  window.print();
+}
+window.addEventListener('afterprint', function () {
+  var el = document.getElementById('rel-print-header');
+  if (el) el.style.display = 'none';
+});
+
+/* =========================================================================
+   USUÁRIOS (master)
+   ========================================================================= */
+document.getElementById('btn-usuarios').addEventListener('click', function () {
+  document.getElementById('u-erro').textContent = '';
+  document.getElementById('u-ok').textContent = '';
+  document.getElementById('u-nome').value = '';
+  document.getElementById('u-senha').value = '';
+  carregarUsuarios();
+  abrirModal('overlay-usuarios');
+});
+
+function carregarUsuarios() {
+  var el = document.getElementById('lista-usuarios');
+  el.innerHTML = '<div class="empty-msg">Carregando…</div>';
+  api('listUsuarios', {}).then(function (resp) {
+    if (!resp.ok) { el.innerHTML = '<div class="msg-erro">' + (resp.erro || 'Erro ao listar') + '</div>'; return; }
+    if (!resp.usuarios.length) { el.innerHTML = '<div class="empty-msg">Nenhum usuário cadastrado.</div>'; return; }
+    el.innerHTML = resp.usuarios.map(function (u) {
+      var ativo = String(u.ativo).toLowerCase() === 'sim';
+      return '<div class="reuniao-item" style="cursor:default">' +
+        '<div style="flex:1"><b>' + escapeHtml(u.nome || '(sem nome)') + '</b>' +
+        '<div class="meta">Papel: ' + escapeHtml(u.papel) + ' · ' + (ativo ? 'Ativo' : 'Inativo') + '</div></div>' +
+        '<button class="btn-cinza" onclick="alternarUsuario(\'' + u.id + '\', ' + (ativo ? 'false' : 'true') + ')">' +
+        (ativo ? 'Desativar' : 'Ativar') + '</button></div>';
+    }).join('');
+  });
+}
+
+function alternarUsuario(id, ativar) {
+  api('setUsuarioAtivo', { id: id, ativo: ativar ? 'sim' : 'não' }).then(function (resp) {
+    if (resp.ok) carregarUsuarios();
+    else alert(resp.erro || 'Erro ao atualizar usuário');
+  });
+}
+
+function adicionarUsuario() {
+  var erroEl = document.getElementById('u-erro');
+  var okEl = document.getElementById('u-ok');
+  erroEl.textContent = ''; okEl.textContent = '';
+
+  var nome = document.getElementById('u-nome').value.trim();
+  var papel = document.getElementById('u-papel').value;
+  var senha = document.getElementById('u-senha').value;
+
+  if (!senha || senha.length < 6) { erroEl.textContent = 'A senha deve ter ao menos 6 caracteres.'; return; }
+
+  api('addUsuario', { nova_senha: senha, papel: papel, nome: nome }).then(function (resp) {
+    if (!resp.ok) { erroEl.textContent = resp.erro || 'Erro ao adicionar'; return; }
+    okEl.textContent = 'Usuário adicionado!';
+    document.getElementById('u-nome').value = '';
+    document.getElementById('u-senha').value = '';
+    carregarUsuarios();
+  });
+}
+
+/* =========================================================================
+   FORMULÁRIO — NOVA / EDITAR REUNIÃO (master)
+   ========================================================================= */
+document.getElementById('btn-nova-reuniao').addEventListener('click', function () {
+  abrirFormNovo();
+});
+
+function limparForm() {
+  ['f-titulo','f-endereco','f-lideranca-nome','f-lideranca-telefone','f-lideranca-assistente','f-data-hora','f-observacoes'
+  ].forEach(function (id) { document.getElementById(id).value = ''; });
+  document.getElementById('f-duracao').value = '60';
+  ['participantes-lista', 'representantes-lista', 'motoristas-lista', 'vips-lista'].forEach(function (id) {
+    document.getElementById(id).innerHTML = '';
+  });
+  document.getElementById('form-erro').textContent = '';
+  document.getElementById('form-ok').textContent = '';
+  document.getElementById('f-data-limite-aviso').style.display = 'none';
+  document.getElementById('btn-excluir-reuniao').style.display = 'none';
+  atualizarAvisoEndereco();
+}
+
+function abrirFormNovo() {
+  limparForm();
+  estado.reuniaoEditandoId = null;
+  document.getElementById('form-titulo-modal').textContent = 'Nova reunião';
+  abrirModal('overlay-form');
+  setTimeout(function () { inicializarMiniMapa(CIDADE_LAT_PADRAO, CIDADE_LNG_PADRAO); }, 50);
+  novaLinhaPessoa('representantes-lista', 'representante');
+  novaLinhaPessoa('motoristas-lista', 'motorista');
+  novaLinhaPessoa('participantes-lista', 'participante');
+  atualizarAvisoRepresentante();
+  atualizarAvisoEndereco();
+}
+
+function abrirFormEdicao(id) {
+  var r = estado.reunioes.find(function (x) { return x.id === id; });
+  if (!r) return;
+  limparForm();
+  estado.reuniaoEditandoId = id;
+  document.getElementById('form-titulo-modal').textContent = 'Editar reunião';
+  document.getElementById('f-titulo').value = r.titulo || '';
+  document.getElementById('f-endereco').value = r.endereco || '';
+  document.getElementById('f-lideranca-nome').value = r.lideranca_nome || '';
+  document.getElementById('f-lideranca-telefone').value = r.lideranca_telefone || '';
+  document.getElementById('f-lideranca-assistente').value = r.lideranca_telefone_assistente || '';
+  if (r.data_hora) {
+    var d = new Date(r.data_hora);
+    if (!isNaN(d)) document.getElementById('f-data-hora').value = paraDatetimeLocal(d);
+  }
+  document.getElementById('f-duracao').value = r.duracao_minutos || 60;
+  document.getElementById('f-observacoes').value = r.observacoes || '';
+  document.getElementById('btn-excluir-reuniao').style.display = 'inline-block';
+
+  fecharModal('overlay-detalhes');
+  abrirModal('overlay-form');
+  setTimeout(function () { inicializarMiniMapa(r.lat || CIDADE_LAT_PADRAO, r.lng || CIDADE_LNG_PADRAO); }, 50);
+  atualizarAvisoEndereco();
+
+  (r.representantes || []).forEach(function (p) { novaLinhaPessoa('representantes-lista', 'representante', p); });
+  if (!r.representantes || !r.representantes.length) novaLinhaPessoa('representantes-lista', 'representante');
+
+  (r.motoristas || []).forEach(function (p) { novaLinhaPessoa('motoristas-lista', 'motorista', p); });
+  if (!r.motoristas || !r.motoristas.length) novaLinhaPessoa('motoristas-lista', 'motorista');
+
+  (r.vips || []).forEach(function (p) { novaLinhaPessoa('vips-lista', 'vip', p); });
+
+  (r.participantes || []).forEach(function (p) { novaLinhaPessoa('participantes-lista', 'participante', p); });
+  if (!r.participantes || !r.participantes.length) novaLinhaPessoa('participantes-lista', 'participante');
+
+  atualizarAvisoRepresentante();
+}
+
+function paraDatetimeLocal(d) {
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+// tipo: 'participante' | 'representante' | 'motorista' | 'vip'
+function novaLinhaPessoa(containerId, tipo, valores) {
+  valores = valores || {};
+  var div = document.createElement('div');
+  div.className = 'part-row';
+  var temTel = (tipo === 'participante' || tipo === 'representante' || tipo === 'motorista');
+  var html = '<input type="text" placeholder="Nome" class="p-nome" list="cadastro-nomes" value="' + escapeHtml(valores.nome || '') + '">';
+
+  if (temTel) {
+    html += '<input type="text" placeholder="Telefone" class="p-tel" style="max-width:140px" value="' + escapeHtml(valores.telefone || '') + '">';
+  }
+  if (tipo === 'motorista') {
+    html += '<input type="text" placeholder="Veículo (modelo, cor, placa)" class="p-veiculo" style="max-width:220px" value="' + escapeHtml(valores.veiculo || '') + '">';
+  }
+  if (tipo === 'participante') {
+    var vai = String(valores.confirmado).toLowerCase() !== 'não' && String(valores.confirmado).toLowerCase() !== 'nao';
+    html += '<label><input type="checkbox" class="p-vai" ' + (vai ? 'checked' : '') + '> vai</label>';
+  }
+  if (tipo === 'vip') {
+    var aut = String(valores.autoridade).toLowerCase() === 'sim';
+    html += '<label><input type="checkbox" class="p-autoridade" ' + (aut ? 'checked' : '') + '> é autoridade</label>';
+  }
+  html += '<button type="button" onclick="this.parentElement.remove(); atualizarAvisoRepresentante();">✕</button>';
+  div.innerHTML = html;
+  document.getElementById(containerId).appendChild(div);
+
+  // Autocompletar telefone/veículo quando o nome digitado bater com alguém do Cadastro.
+  if (temTel) {
+    div.querySelector('.p-nome').addEventListener('change', function () {
+      var achado = buscarNoCadastro(this.value);
+      if (achado) {
+        var telInput = div.querySelector('.p-tel');
+        if (telInput && achado.telefone) telInput.value = achado.telefone;
+        var veicInput = div.querySelector('.p-veiculo');
+        if (veicInput && achado.veiculo) veicInput.value = achado.veiculo;
+      }
+      if (containerId === 'representantes-lista') atualizarAvisoRepresentante();
+    });
+  }
+}
+
+// Mostra/esconde o aviso "sem representante definido" dentro do formulário,
+// com sugestão de quem (do Cadastro) estaria livre no horário escolhido.
+function atualizarAvisoRepresentante() {
+  var avisoEl = document.getElementById('aviso-sem-representante');
+  var temAlguem = lerLinhasPessoas('representantes-lista').length > 0;
+  if (temAlguem) {
+    avisoEl.style.display = 'none';
+    return;
+  }
+  avisoEl.style.display = 'block';
+  var dataHora = document.getElementById('f-data-hora').value;
+  var duracao = document.getElementById('f-duracao').value;
+  var sugestaoEl = document.getElementById('sugestao-livres');
+  if (!dataHora) { sugestaoEl.textContent = ''; return; }
+  var livres = pessoasLivresNoHorario(new Date(dataHora).toISOString(), duracao, estado.reuniaoEditandoId);
+  sugestaoEl.textContent = livres.length ? 'Sugestão — livres nesse horário: ' + livres.join(', ') : '';
+}
+
+document.getElementById('f-data-hora').addEventListener('change', atualizarAvisoRepresentante);
+document.getElementById('f-duracao').addEventListener('input', atualizarAvisoRepresentante);
+
+// Mostra/esconde o aviso "sem endereço definido" dentro do formulário (mesmo tratamento
+// dado ao aviso de representante ausente, mas para o local da reunião).
+function atualizarAvisoEndereco() {
+  var avisoEl = document.getElementById('aviso-sem-endereco');
+  var temEndereco = document.getElementById('f-endereco').value.trim().length > 0;
+  avisoEl.style.display = temEndereco ? 'none' : 'block';
+}
+document.getElementById('f-endereco').addEventListener('input', atualizarAvisoEndereco);
+
+function lerLinhasPessoas(containerId) {
+  return Array.from(document.querySelectorAll('#' + containerId + ' .part-row')).map(function (row) {
+    var o = { nome: row.querySelector('.p-nome').value.trim() };
+    var tel = row.querySelector('.p-tel'); if (tel) o.telefone = tel.value.trim();
+    var veic = row.querySelector('.p-veiculo'); if (veic) o.veiculo = veic.value.trim();
+    var vai = row.querySelector('.p-vai'); if (vai) o.confirmado = vai.checked ? 'sim' : 'não';
+    var aut = row.querySelector('.p-autoridade'); if (aut) o.autoridade = aut.checked ? 'sim' : 'não';
+    return o;
+  }).filter(function (o) { return o.nome; });
+}
+
+function inicializarMiniMapa(lat, lng) {
+  if (estado.miniMap) {
+    estado.miniMap.remove();
+    estado.miniMap = null;
+  }
+  var container = document.getElementById('mini-mapa');
+  container.innerHTML = '';
+  estado.miniMap = L.map('mini-mapa').setView([lat, lng], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(estado.miniMap);
+  estado.miniMarker = L.marker([lat, lng], { draggable: true, icon: iconePin('#1e5aa8') }).addTo(estado.miniMap);
+  estado.miniMap.on('click', function (e) { estado.miniMarker.setLatLng(e.latlng); });
+}
+
+function buscarEndereco() {
+  var q = document.getElementById('f-endereco').value;
+  if (!q) return;
+  var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=' +
+    encodeURIComponent(q + ', Teresina, Piauí, Brasil');
+  fetch(url).then(function (r) { return r.json(); }).then(function (resultados) {
+    if (resultados && resultados.length) {
+      var lat = parseFloat(resultados[0].lat), lng = parseFloat(resultados[0].lon);
+      estado.miniMap.setView([lat, lng], 16);
+      estado.miniMarker.setLatLng([lat, lng]);
+    } else {
+      alert('Endereço não encontrado automaticamente. Ajuste o alfinete manualmente no mapa.');
+    }
+  }).catch(function () {
+    alert('Não foi possível buscar o endereço agora. Ajuste o alfinete manualmente no mapa.');
+  });
+}
+
+function salvarReuniao() {
+  var erroEl = document.getElementById('form-erro');
+  var okEl = document.getElementById('form-ok');
+  erroEl.textContent = ''; okEl.textContent = '';
+
+  var titulo = document.getElementById('f-titulo').value.trim();
+  var dataHora = document.getElementById('f-data-hora').value;
+  var liderancaNome = document.getElementById('f-lideranca-nome').value.trim();
+
+  if (!liderancaNome || !dataHora) {
+    erroEl.textContent = 'Preencha ao menos o nome da liderança e a data/hora.';
+    return;
+  }
+
+  var dataHoraObj = new Date(dataHora);
+  var avisoEl = document.getElementById('f-data-limite-aviso');
+  if (estado.dataLimiteProjeto && dataHoraObj > new Date(estado.dataLimiteProjeto)) {
+    avisoEl.style.display = 'block';
+    avisoEl.textContent = 'Atenção: esta data está depois do limite do comitê (' + estado.dataLimiteProjeto.split('T')[0].split('-').reverse().join('/') + '). Salvando mesmo assim.';
+  } else {
+    avisoEl.style.display = 'none';
+  }
+
+  var pos = estado.miniMarker.getLatLng();
+
+  var dados = {
+    titulo: titulo,
+    endereco: document.getElementById('f-endereco').value.trim(),
+    lat: pos.lat,
+    lng: pos.lng,
+    data_hora: dataHoraObj.toISOString(),
+    duracao_minutos: parseInt(document.getElementById('f-duracao').value, 10) || 60,
+    lideranca_nome: liderancaNome,
+    lideranca_telefone: document.getElementById('f-lideranca-telefone').value.trim(),
+    lideranca_telefone_assistente: document.getElementById('f-lideranca-assistente').value.trim(),
+    observacoes: document.getElementById('f-observacoes').value.trim()
+  };
+
+  var grupos = {
+    representantes: lerLinhasPessoas('representantes-lista'),
+    motoristas: lerLinhasPessoas('motoristas-lista'),
+    vips: lerLinhasPessoas('vips-lista'),
+    participantes: lerLinhasPessoas('participantes-lista')
+  };
+
+  var chamada = estado.reuniaoEditandoId
+    ? api('updateReuniao', Object.assign({ id: estado.reuniaoEditandoId }, dados))
+    : api('addReuniao', dados);
+
+  chamada.then(function (resp) {
+    if (!resp.ok) { erroEl.textContent = resp.erro || 'Erro ao salvar'; return; }
+    var id = estado.reuniaoEditandoId || resp.id;
+    return api('setPessoas', { reuniao_id: id, grupos: JSON.stringify(grupos) });
+  }).then(function (resp2) {
+    if (resp2 && !resp2.ok) { erroEl.textContent = resp2.erro || 'Reunião salva, mas houve erro nos participantes.'; return; }
+    okEl.textContent = 'Salvo com sucesso!';
+    carregarReunioes();
+    setTimeout(function () { fecharModal('overlay-form'); }, 700);
+  }).catch(function (err) {
+    erroEl.textContent = 'Erro de conexão: ' + err;
+  });
+}
+
+function excluirReuniaoAtual() {
+  if (!estado.reuniaoEditandoId) return;
+  if (!confirm('Excluir esta reunião definitivamente?')) return;
+  api('deleteReuniao', { id: estado.reuniaoEditandoId }).then(function (resp) {
+    if (resp.ok) {
+      fecharModal('overlay-form');
+      carregarReunioes();
+    } else {
+      alert(resp.erro || 'Erro ao excluir');
+    }
+  });
+}
+
+/* =========================================================================
+   INICIALIZAÇÃO
+   ========================================================================= */
+atualizarHeaderPapel();
+carregarConfig();
+carregarReunioes();
+carregarCadastro();
+
+setInterval(atualizarCoresNoMapa, 20000);   // recalcula cores a cada 20s
+setInterval(carregarReunioes, 60000);       // busca dados novos a cada 60s
+
+// No modo painel a tela fica aberta por horas numa TV: garante que o filtro "hoje"
+// acompanhe a virada do dia sem precisar de qualquer interação.
+if (MODO_PAINEL) {
+  setInterval(function () {
+    var hoje = hojeStr();
+    if (estado.dataFiltro !== hoje) {
+      estado.dataFiltro = hoje;
+      document.getElementById('filtro-data').value = hoje;
+      redesenharMarcadores();
+      renderLista();
+    }
+  }, 60000);
+}
+</script>
+</body>
+</html>
