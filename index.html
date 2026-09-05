@@ -7,6 +7,7 @@
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <style>
   :root {
@@ -229,6 +230,7 @@
   <div class="header-actions">
     <span class="badge-papel" id="badge-papel">Visitante</span>
     <button class="btn-primary" id="btn-nova-reuniao" style="display:none">+ Nova reunião</button>
+    <button class="btn-outline" id="btn-sync-agenda" style="display:none">🔄 Sincronizar Agenda</button>
     <button class="btn-outline" id="btn-relatorios" style="display:none">Relatórios</button>
     <button class="btn-outline" id="btn-modo-painel" style="display:none">📺 Modo painel</button>
     <button class="btn-outline" id="btn-usuarios" style="display:none">Usuários</button>
@@ -472,6 +474,11 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxnngKx6sQap2NW5-jsAKn6N_
 
 var CIDADE_LAT_PADRAO = -5.089;
 var CIDADE_LNG_PADRAO = -42.801;
+
+// Sincronização com o Google Agenda do comitê (botão "🔄 Sincronizar Agenda", só para master).
+var GOOGLE_CLIENT_ID = '49015022978-0agt7ptlookq9096og4u09v4dfbn5rad.apps.googleusercontent.com';
+var GOOGLE_CALENDAR_ID = '9dddb0b75fae562ce0f8cf0d2b33c66d7c71d8cc4d3fc8cafb6fd373fc4830ea@group.calendar.google.com';
+var GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 
 /* =========================================================================
    ESTADO
@@ -895,6 +902,7 @@ function atualizarHeaderPapel() {
   var btnLogin = document.getElementById('btn-login');
   var btnLogout = document.getElementById('btn-logout');
   var btnNova = document.getElementById('btn-nova-reuniao');
+  var btnSyncAgenda = document.getElementById('btn-sync-agenda');
 
   var btnUsuarios = document.getElementById('btn-usuarios');
   var btnRelatorios = document.getElementById('btn-relatorios');
@@ -903,16 +911,19 @@ function atualizarHeaderPapel() {
   if (estado.papel === 'master') {
     badge.textContent = 'Master' + (estado.nome ? ' — ' + estado.nome : '');
     btnNova.style.display = 'inline-block';
+    btnSyncAgenda.style.display = 'inline-block';
     btnUsuarios.style.display = 'inline-block';
     btnModoPainel.style.display = 'inline-block';
   } else if (estado.papel === 'consulta') {
     badge.textContent = 'Consulta' + (estado.nome ? ' — ' + estado.nome : '');
     btnNova.style.display = 'none';
+    btnSyncAgenda.style.display = 'none';
     btnUsuarios.style.display = 'none';
     btnModoPainel.style.display = 'none';
   } else {
     badge.textContent = 'Visitante (acesso geral)';
     btnNova.style.display = 'none';
+    btnSyncAgenda.style.display = 'none';
     btnUsuarios.style.display = 'none';
     btnModoPainel.style.display = 'none';
   }
@@ -1434,6 +1445,139 @@ function buscarEndereco() {
     alert('Não foi possível buscar o endereço agora. Ajuste o alfinete manualmente no mapa.');
   });
 }
+
+/* =========================================================================
+   SINCRONIZAÇÃO COM O GOOGLE AGENDA (botão "🔄 Sincronizar Agenda", só master)
+   ========================================================================= */
+
+// Tenta descobrir lat/lng de um texto de local vindo de um evento do Google Agenda:
+// primeiro tenta ler como link/coordenadas do Google Maps (rápido, sem rede) e,
+// se não der, tenta geocodificar como endereço de texto via Nominatim.
+function geocodeLocalEvento_(texto) {
+  var coords = extrairCoordenadasDeTexto(texto);
+  if (coords) return Promise.resolve(coords);
+  if (!texto || !texto.trim() || /goo\.gl|maps\.app\.goo\.gl/i.test(texto)) return Promise.resolve(null);
+
+  var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=' +
+    encodeURIComponent(texto + ', Teresina, Piauí, Brasil');
+  return fetch(url).then(function (r) { return r.json(); }).then(function (resultados) {
+    if (resultados && resultados.length) {
+      return { lat: parseFloat(resultados[0].lat), lng: parseFloat(resultados[0].lon) };
+    }
+    return null;
+  }).catch(function () { return null; });
+}
+
+var estadoGoogleAgenda = { tokenClient: null, accessToken: null };
+
+// Prepara o cliente de login do Google (Google Identity Services) na primeira vez que for preciso.
+function garantirTokenClientGoogle_() {
+  if (estadoGoogleAgenda.tokenClient) return;
+  estadoGoogleAgenda.tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: GOOGLE_CALENDAR_SCOPE,
+    callback: '' // definido dinamicamente a cada chamada, veja obterTokenGoogle_()
+  });
+}
+
+// Pede (ou reaproveita) um token de acesso à Google Agenda do usuário logado no navegador.
+// Na primeira vez abre a tela "Entrar com Google" / consentimento; depois, tenta renovar em silêncio.
+function obterTokenGoogle_() {
+  return new Promise(function (resolve, reject) {
+    if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+      reject(new Error('Não foi possível carregar o login do Google. Verifique sua conexão e tente novamente.'));
+      return;
+    }
+    garantirTokenClientGoogle_();
+    estadoGoogleAgenda.tokenClient.callback = function (resp) {
+      if (resp && resp.access_token) {
+        estadoGoogleAgenda.accessToken = resp.access_token;
+        resolve(resp.access_token);
+      } else {
+        reject(new Error('Login com Google não concluído.'));
+      }
+    };
+    estadoGoogleAgenda.tokenClient.error_callback = function (err) {
+      reject(new Error((err && err.type) || 'Erro no login com Google'));
+    };
+    estadoGoogleAgenda.tokenClient.requestAccessToken({
+      prompt: estadoGoogleAgenda.accessToken ? '' : 'consent'
+    });
+  });
+}
+
+// Converte um evento do Google Calendar API num objeto de reunião para o backend.
+// Retorna null para eventos sem horário definido (dia inteiro), que ficam de fora da sincronização.
+function eventoGoogleParaReuniao_(ev) {
+  if (!ev.start || !ev.start.dateTime) return null; // evento de "dia inteiro" — sem hora, não sincroniza
+
+  var inicio = new Date(ev.start.dateTime);
+  var fim = ev.end && ev.end.dateTime ? new Date(ev.end.dateTime) : null;
+  var duracao = fim ? Math.max(15, Math.round((fim - inicio) / 60000)) : 60;
+
+  return {
+    google_event_id: ev.id,
+    titulo: ev.summary || '(sem título)',
+    endereco: ev.location || '',
+    data_hora: inicio.toISOString(),
+    duracao_minutos: duracao,
+    observacoes: (ev.description || '').replace(/<[^>]*>/g, '').trim()
+  };
+}
+
+function sincronizarGoogleAgenda() {
+  var btn = document.getElementById('btn-sync-agenda');
+  var textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Conectando ao Google…';
+
+  obterTokenGoogle_().then(function (token) {
+    btn.textContent = 'Buscando reuniões na agenda…';
+    var agora = new Date();
+    var timeMin = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).toISOString();
+    var timeMax = new Date(agora.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString(); // próximos 90 dias
+
+    var url = 'https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(GOOGLE_CALENDAR_ID) +
+      '/events?singleEvents=true&orderBy=startTime&maxResults=2500&timeMin=' + encodeURIComponent(timeMin) +
+      '&timeMax=' + encodeURIComponent(timeMax);
+
+    return fetch(url, { headers: { Authorization: 'Bearer ' + token } }).then(function (r) {
+      if (!r.ok) throw new Error('Não foi possível ler a Google Agenda (HTTP ' + r.status + ').');
+      return r.json();
+    });
+  }).then(function (resp) {
+    var eventos = (resp.items || []).map(eventoGoogleParaReuniao_).filter(Boolean);
+    if (!eventos.length) {
+      alert('Nenhuma reunião com horário definido encontrada na agenda do comitê (próximos 90 dias).');
+      return null;
+    }
+
+    btn.textContent = 'Localizando endereços no mapa (' + eventos.length + ')…';
+    return Promise.all(eventos.map(function (ev) {
+      return geocodeLocalEvento_(ev.endereco).then(function (coords) {
+        ev.lat = coords ? coords.lat : CIDADE_LAT_PADRAO;
+        ev.lng = coords ? coords.lng : CIDADE_LNG_PADRAO;
+        return ev;
+      });
+    }));
+  }).then(function (eventosProntos) {
+    if (!eventosProntos) return null;
+    btn.textContent = 'Salvando reuniões…';
+    return api('syncGoogleEventos', { eventos: JSON.stringify(eventosProntos) });
+  }).then(function (resp) {
+    if (!resp) return;
+    if (!resp.ok) { alert(resp.erro || 'Erro ao sincronizar com a Google Agenda.'); return; }
+    carregarReunioes();
+    alert('Agenda sincronizada! ' + resp.criados + ' reunião(ões) criada(s) e ' + resp.atualizados + ' atualizada(s).');
+  }).catch(function (err) {
+    alert('Erro ao sincronizar: ' + err.message);
+  }).finally(function () {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  });
+}
+
+document.getElementById('btn-sync-agenda').addEventListener('click', sincronizarGoogleAgenda);
 
 function salvarReuniao() {
   var erroEl = document.getElementById('form-erro');
