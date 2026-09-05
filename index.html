@@ -308,10 +308,10 @@
 
     <div class="campo">
       <label>Endereço / local</label>
-      <input type="text" id="f-endereco" placeholder="Ex.: Rua Tal, 123, Bairro, Teresina">
+      <input type="text" id="f-endereco" placeholder="Ex.: Rua Tal, 123, Bairro, Teresina — ou cole um link do Google Maps">
       <div style="display:flex; gap:8px; margin-top:6px;">
         <button type="button" class="btn-cinza" onclick="buscarEndereco()">Buscar no mapa</button>
-        <span style="font-size:11.5px; color:var(--texto-suave); align-self:center;">Depois ajuste arrastando o alfinete azul no mapa abaixo.</span>
+        <span style="font-size:11.5px; color:var(--texto-suave); align-self:center;">Cole um link/localização do Google Maps que ele já localiza sozinho, ou ajuste arrastando o alfinete azul no mapa abaixo.</span>
       </div>
     </div>
 
@@ -1333,6 +1333,16 @@ function atualizarAvisoEndereco() {
 }
 document.getElementById('f-endereco').addEventListener('input', atualizarAvisoEndereco);
 
+// Ao colar um link do Google Maps (ou coordenadas), localiza no mapa automaticamente,
+// sem precisar clicar em "Buscar no mapa" — cobre o caso de mandarem só a localização.
+document.getElementById('f-endereco').addEventListener('paste', function () {
+  setTimeout(function () {
+    var q = document.getElementById('f-endereco').value;
+    var coords = extrairCoordenadasDeTexto(q);
+    if (coords && estado.miniMap) localizarNoMapa(coords.lat, coords.lng);
+  }, 0);
+});
+
 function lerLinhasPessoas(containerId) {
   return Array.from(document.querySelectorAll('#' + containerId + ' .part-row')).map(function (row) {
     var o = { nome: row.querySelector('.p-nome').value.trim() };
@@ -1357,16 +1367,66 @@ function inicializarMiniMapa(lat, lng) {
   estado.miniMap.on('click', function (e) { estado.miniMarker.setLatLng(e.latlng); });
 }
 
+// Tenta extrair latitude/longitude de um link do Google Maps (ou de um texto "lat, lng"
+// colado diretamente), cobrindo os formatos mais comuns:
+//   https://www.google.com/maps?q=-5.1922523,-42.7358838&z=17
+//   https://www.google.com/maps/@-5.1922523,-42.7358838,17z
+//   https://www.google.com/maps/place/.../@-5.1922523,-42.7358838,17z/...
+//   https://www.google.com/maps/place/.../!3d-5.1922523!4d-42.7358838
+//   -5.1922523, -42.7358838  (coordenadas coladas soltas)
+function extrairCoordenadasDeTexto(texto) {
+  if (!texto) return null;
+  texto = String(texto).trim();
+
+  var padroes = [
+    /[?&]q=(-?\d{1,3}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/,
+    /[?&]ll=(-?\d{1,3}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/,
+    /@(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)(?:,|$|\/|z)/,
+    /!3d(-?\d{1,3}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/,
+    /^(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/
+  ];
+
+  for (var i = 0; i < padroes.length; i++) {
+    var m = texto.match(padroes[i]);
+    if (m) {
+      var lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+      if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+        return { lat: lat, lng: lng };
+      }
+    }
+  }
+  return null;
+}
+
+function localizarNoMapa(lat, lng, zoom) {
+  estado.miniMap.setView([lat, lng], zoom || 17);
+  estado.miniMarker.setLatLng([lat, lng]);
+}
+
 function buscarEndereco() {
   var q = document.getElementById('f-endereco').value;
   if (!q) return;
+
+  // Se for um link do Google Maps (ou coordenadas coladas direto), localiza na hora,
+  // sem depender de busca por texto — resolve o caso de receberem só a localização,
+  // sem o endereço escrito.
+  var coords = extrairCoordenadasDeTexto(q);
+  if (coords) {
+    localizarNoMapa(coords.lat, coords.lng);
+    return;
+  }
+
+  if (/goo\.gl|maps\.app\.goo\.gl/i.test(q)) {
+    alert('Esse é um link curto do Google Maps e não dá pra ler as coordenadas direto dele. Abra o link, toque em "Compartilhar" e cole aqui o link completo (com @lat,lng) ou as coordenadas, ou ajuste o alfinete manualmente.');
+    return;
+  }
+
   var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=' +
     encodeURIComponent(q + ', Teresina, Piauí, Brasil');
   fetch(url).then(function (r) { return r.json(); }).then(function (resultados) {
     if (resultados && resultados.length) {
       var lat = parseFloat(resultados[0].lat), lng = parseFloat(resultados[0].lon);
-      estado.miniMap.setView([lat, lng], 16);
-      estado.miniMarker.setLatLng([lat, lng]);
+      localizarNoMapa(lat, lng, 16);
     } else {
       alert('Endereço não encontrado automaticamente. Ajuste o alfinete manualmente no mapa.');
     }
