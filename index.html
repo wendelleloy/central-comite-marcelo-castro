@@ -466,6 +466,28 @@
   </div>
 </div>
 
+<!-- ===================== MODAL: SINCRONIZAR AGENDA (master) ===================== -->
+<div class="overlay" id="overlay-sync-agenda">
+  <div class="modal wide">
+    <button class="close-x" onclick="fecharModal('overlay-sync-agenda')">✕</button>
+    <h3>Sincronizar com sua Google Agenda</h3>
+    <div style="font-size:12.5px; color:var(--texto-suave); margin-bottom:10px;">
+      Marque quais compromissos da sua agenda pessoal (Google) devem virar reuniões no sistema — visíveis para todo mundo. Só os marcados serão adicionados/atualizados.
+    </div>
+    <div id="sync-lista-vazia" class="empty-msg" style="display:none;">Nenhum evento com horário definido encontrado na sua agenda (próximos 90 dias).</div>
+    <div id="sync-lista-toolbar" style="display:none; gap:8px; margin-bottom:8px;">
+      <button class="btn-cinza" style="font-size:12px; padding:5px 10px;" onclick="marcarTodosEventosAgenda(true)">Selecionar todos</button>
+      <button class="btn-cinza" style="font-size:12px; padding:5px 10px;" onclick="marcarTodosEventosAgenda(false)">Nenhum</button>
+    </div>
+    <div id="sync-lista-eventos" style="max-height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
+    <div class="msg-erro" id="sync-erro"></div>
+    <div class="acoes-modal">
+      <button class="btn-azul" id="btn-sync-confirmar" onclick="confirmarSincronizacaoAgenda()">Adicionar selecionados</button>
+      <button class="btn-cinza" onclick="fecharModal('overlay-sync-agenda')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* =========================================================================
    CONFIGURAÇÃO
@@ -475,9 +497,11 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxnngKx6sQap2NW5-jsAKn6N_
 var CIDADE_LAT_PADRAO = -5.089;
 var CIDADE_LNG_PADRAO = -42.801;
 
-// Sincronização com o Google Agenda do comitê (botão "🔄 Sincronizar Agenda", só para master).
+// Sincronização com o Google Agenda (botão "🔄 Sincronizar Agenda", só para master).
+// Cada usuário sincroniza com a PRÓPRIA agenda do Google (a agenda "primary" da conta em
+// que ele fizer login), escolhe manualmente quais eventos viram reuniões, e essas reuniões
+// passam a ser vistas por todo mundo no sistema, como qualquer outra.
 var GOOGLE_CLIENT_ID = '49015022978-0agt7ptlookq9096og4u09v4dfbn5rad.apps.googleusercontent.com';
-var GOOGLE_CALENDAR_ID = '9dddb0b75fae562ce0f8cf0d2b33c66d7c71d8cc4d3fc8cafb6fd373fc4830ea@group.calendar.google.com';
 var GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 
 /* =========================================================================
@@ -1525,6 +1549,18 @@ function eventoGoogleParaReuniao_(ev) {
   };
 }
 
+function formatarDataHoraEvento_(iso) {
+  var d = new Date(iso);
+  var dia = String(d.getDate()).padStart(2, '0');
+  var mes = String(d.getMonth() + 1).padStart(2, '0');
+  var hora = String(d.getHours()).padStart(2, '0');
+  var min = String(d.getMinutes()).padStart(2, '0');
+  return dia + '/' + mes + ' às ' + hora + ':' + min;
+}
+
+// Passo 1: conecta com a conta Google do usuário e busca os eventos com horário
+// definido da agenda PESSOAL dele ("primary"), dos próximos 90 dias, e abre o modal
+// de seleção — nada é gravado no sistema ainda nesta etapa.
 function sincronizarGoogleAgenda() {
   var btn = document.getElementById('btn-sync-agenda');
   var textoOriginal = btn.textContent;
@@ -1532,45 +1568,112 @@ function sincronizarGoogleAgenda() {
   btn.textContent = 'Conectando ao Google…';
 
   obterTokenGoogle_().then(function (token) {
-    btn.textContent = 'Buscando reuniões na agenda…';
+    btn.textContent = 'Buscando compromissos na sua agenda…';
     var agora = new Date();
     var timeMin = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).toISOString();
     var timeMax = new Date(agora.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString(); // próximos 90 dias
 
-    var url = 'https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(GOOGLE_CALENDAR_ID) +
-      '/events?singleEvents=true&orderBy=startTime&maxResults=2500&timeMin=' + encodeURIComponent(timeMin) +
+    var url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events' +
+      '?singleEvents=true&orderBy=startTime&maxResults=2500&timeMin=' + encodeURIComponent(timeMin) +
       '&timeMax=' + encodeURIComponent(timeMax);
 
     return fetch(url, { headers: { Authorization: 'Bearer ' + token } }).then(function (r) {
-      if (!r.ok) throw new Error('Não foi possível ler a Google Agenda (HTTP ' + r.status + ').');
+      if (!r.ok) throw new Error('Não foi possível ler sua Google Agenda (HTTP ' + r.status + ').');
       return r.json();
     });
   }).then(function (resp) {
     var eventos = (resp.items || []).map(eventoGoogleParaReuniao_).filter(Boolean);
-    if (!eventos.length) {
-      alert('Nenhuma reunião com horário definido encontrada na agenda do comitê (próximos 90 dias).');
-      return null;
-    }
+    abrirModalSelecaoAgenda(eventos);
+  }).catch(function (err) {
+    alert('Erro ao conectar com a Google Agenda: ' + err.message);
+  }).finally(function () {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  });
+}
 
-    btn.textContent = 'Localizando endereços no mapa (' + eventos.length + ')…';
-    return Promise.all(eventos.map(function (ev) {
-      return geocodeLocalEvento_(ev.endereco).then(function (coords) {
-        ev.lat = coords ? coords.lat : CIDADE_LAT_PADRAO;
-        ev.lng = coords ? coords.lng : CIDADE_LNG_PADRAO;
-        return ev;
-      });
-    }));
-  }).then(function (eventosProntos) {
-    if (!eventosProntos) return null;
+var estadoSyncAgenda = { eventos: [] };
+
+// Passo 2: mostra a lista de compromissos encontrados com uma caixa de marcação em cada
+// um, para o usuário escolher manualmente quais viram reuniões visíveis para todo mundo.
+function abrirModalSelecaoAgenda(eventos) {
+  estadoSyncAgenda.eventos = eventos;
+  document.getElementById('sync-erro').textContent = '';
+
+  var listaEl = document.getElementById('sync-lista-eventos');
+  var vazioEl = document.getElementById('sync-lista-vazia');
+  var toolbarEl = document.getElementById('sync-lista-toolbar');
+  var btnConfirmar = document.getElementById('btn-sync-confirmar');
+  listaEl.innerHTML = '';
+
+  if (!eventos.length) {
+    vazioEl.style.display = 'block';
+    toolbarEl.style.display = 'none';
+    btnConfirmar.style.display = 'none';
+  } else {
+    vazioEl.style.display = 'none';
+    toolbarEl.style.display = 'flex';
+    btnConfirmar.style.display = 'inline-block';
+    eventos.forEach(function (ev, idx) {
+      var linha = document.createElement('label');
+      linha.style.cssText = 'display:flex; gap:8px; align-items:flex-start; padding:8px 10px; border:1px solid var(--borda); border-radius:8px; cursor:pointer;';
+      linha.innerHTML =
+        '<input type="checkbox" data-idx="' + idx + '" style="margin-top:3px;">' +
+        '<div>' +
+          '<div style="font-weight:600; font-size:13.5px;">' + escapeHtml(ev.titulo) + '</div>' +
+          '<div style="font-size:12px; color:var(--texto-suave);">' + formatarDataHoraEvento_(ev.data_hora) +
+            (ev.endereco ? ' — ' + escapeHtml(ev.endereco) : '') + '</div>' +
+        '</div>';
+      listaEl.appendChild(linha);
+    });
+  }
+
+  abrirModal('overlay-sync-agenda');
+}
+
+function marcarTodosEventosAgenda(valor) {
+  document.querySelectorAll('#sync-lista-eventos input[type=checkbox]').forEach(function (cb) {
+    cb.checked = valor;
+  });
+}
+
+// Passo 3: só os eventos marcados são geocodificados e enviados para virar/atualizar
+// reuniões no sistema (casando por google_event_id, então marcar de novo só atualiza).
+function confirmarSincronizacaoAgenda() {
+  var erroEl = document.getElementById('sync-erro');
+  erroEl.textContent = '';
+
+  var selecionados = [];
+  document.querySelectorAll('#sync-lista-eventos input[type=checkbox]:checked').forEach(function (cb) {
+    selecionados.push(estadoSyncAgenda.eventos[parseInt(cb.dataset.idx, 10)]);
+  });
+
+  if (!selecionados.length) {
+    erroEl.textContent = 'Marque ao menos um compromisso para adicionar.';
+    return;
+  }
+
+  var btn = document.getElementById('btn-sync-confirmar');
+  var textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Localizando endereços…';
+
+  Promise.all(selecionados.map(function (ev) {
+    return geocodeLocalEvento_(ev.endereco).then(function (coords) {
+      ev.lat = coords ? coords.lat : CIDADE_LAT_PADRAO;
+      ev.lng = coords ? coords.lng : CIDADE_LNG_PADRAO;
+      return ev;
+    });
+  })).then(function (eventosProntos) {
     btn.textContent = 'Salvando reuniões…';
     return api('syncGoogleEventos', { eventos: JSON.stringify(eventosProntos) });
   }).then(function (resp) {
-    if (!resp) return;
-    if (!resp.ok) { alert(resp.erro || 'Erro ao sincronizar com a Google Agenda.'); return; }
+    if (!resp.ok) { erroEl.textContent = resp.erro || 'Erro ao sincronizar com a Google Agenda.'; return; }
+    fecharModal('overlay-sync-agenda');
     carregarReunioes();
-    alert('Agenda sincronizada! ' + resp.criados + ' reunião(ões) criada(s) e ' + resp.atualizados + ' atualizada(s).');
+    alert('Pronto! ' + resp.criados + ' reunião(ões) criada(s) e ' + resp.atualizados + ' atualizada(s).');
   }).catch(function (err) {
-    alert('Erro ao sincronizar: ' + err.message);
+    erroEl.textContent = 'Erro de conexão: ' + err.message;
   }).finally(function () {
     btn.disabled = false;
     btn.textContent = textoOriginal;
